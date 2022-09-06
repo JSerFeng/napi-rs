@@ -65,6 +65,7 @@ pub fn napi(_attr: RawStream, input: RawStream) -> RawStream {
 
 #[cfg(not(feature = "noop"))]
 fn expand(attr: TokenStream, input: TokenStream) -> BindgenResult<TokenStream> {
+  println!("proc macro expand");
   let mut item = syn::parse2::<syn::Item>(input)?;
   let opts: BindgenAttrs = syn::parse2(attr)?;
   let mut tokens = proc_macro2::TokenStream::new();
@@ -143,12 +144,20 @@ fn expand(attr: TokenStream, input: TokenStream) -> BindgenResult<TokenStream> {
 #[cfg(all(feature = "type-def", not(feature = "noop")))]
 fn output_type_def(type_def_file: String, type_def: Option<TypeDef>) -> IOResult<()> {
   if type_def.is_some() {
+    let current_crate = format!("{}\n", env::var("CARGO_CRATE_NAME").unwrap());
+    println!("crate {} has been compiled", current_crate);
     let file = fs::OpenOptions::new()
       .append(true)
       .create(true)
-      .open(type_def_file)?;
+      .open(&type_def_file)?;
 
     let mut writer = BufWriter::<fs::File>::new(file);
+
+    // Record like this "crate_name \n type_def \n crate_name \n type_def \n ..."
+    // So we can get Map<type def, crate_name>
+    // And use that to cache type generation info in every compilation
+    writer.write_all(current_crate.as_bytes())?;
+
     writer.write_all(type_def.unwrap().to_string().as_bytes())?;
     writer.write_all("\n".as_bytes())
   } else {

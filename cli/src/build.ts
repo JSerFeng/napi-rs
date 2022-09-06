@@ -357,9 +357,10 @@ export class BuildCommand extends Command {
         ...additionalEnv,
         TYPE_DEF_TMP_PATH: intermediateTypeFile,
       },
-      stdio: 'inherit',
+      stdio: ['inherit', 'inherit', 'inherit'],
       cwd,
     })
+
     const { binaryName, packageName } = getNapiConfig(this.configFileName)
     let cargoArtifactName = this.cargoName
     if (!cargoArtifactName) {
@@ -493,6 +494,7 @@ export class BuildCommand extends Command {
         this.appendPlatformToFilename
           ? join(process.cwd(), this.jsBinding)
           : null
+
       const idents = await processIntermediateTypeFile(
         intermediateTypeFile,
         dtsFilePath,
@@ -542,6 +544,10 @@ interface TypeDef {
   js_doc: string
 }
 
+function enableTsTypeCache() {
+  return !process.env.TS_RENEW
+}
+
 async function processIntermediateTypeFile(
   source: string,
   target: string,
@@ -552,18 +558,40 @@ async function processIntermediateTypeFile(
     debug(`do not find tmp type file. skip type generation`)
     return idents
   }
-
   const tmpFile = await readFileAsync(source, 'utf8')
-  const lines = tmpFile
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
+  let types: TypeDef[] = []
 
-  if (!lines.length) {
+  // complete dts generation from cache
+  // We diff this time type gen info with previous one
+  // Object<crate name -> Array<type def>>
+  const crate2types: Record<string, TypeDef[]> = tmpFile
+    .split('\n')
+    .map((line: string) => line.trim())
+    .filter(Boolean)
+    // now: [ crate_name, type def, crate_name, type def, ... ]
+    // we make it a map, crate_name -> [type def, type def, ...]
+    .reduce((map, curr, i, arr) => {
+      if (i % 2 === 0) {
+        // crate name
+        if (!map[curr]) {
+          map[curr] = []
+        }
+      } else {
+        // type def
+        map[arr[i - 1]].push(JSON.parse(curr) as TypeDef)
+      }
+      return map
+    }, {})
+
+  await addCacheTsTypeGen(crate2types)
+
+  types = Reflect.ownKeys(crate2types)
+    .map((crate) => [...crate2types[crate as string]])
+    .flat()
+
+  if (!types.length) {
     return idents
   }
-
-  const allDefs = lines.map((line) => JSON.parse(line) as TypeDef)
 
   function convertDefs(defs: TypeDef[], nested = false): string {
     const classes = new Map<
@@ -647,11 +675,11 @@ async function processIntermediateTypeFile(
     return dts
   }
 
-  const topLevelDef = convertDefs(allDefs.filter((def) => !def.js_mod))
+  const topLevelDef = convertDefs(types.filter((def) => !def.js_mod))
 
   const namespaceDefs = Object.entries(
     groupBy(
-      allDefs.filter((def) => def.js_mod),
+      types.filter((def) => def.js_mod),
       'js_mod',
     ),
   ).reduce((acc, [mod, defs]) => {
@@ -679,12 +707,39 @@ async function processIntermediateTypeFile(
       : ''
 
   await unlinkAsync(source)
+
   await writeFileAsync(
     target,
     dtsHeader + externalDef + topLevelDef + namespaceDefs,
     'utf8',
   )
   return idents
+}
+
+async function addCacheTsTypeGen(crate2types: Record<string, TypeDef[]>) {
+  // Complete crate -> type info map in the previous build
+  const cachedPath = join(tmpdir(), 'type_def.old.tmp')
+  const prevCrate2types: Record<string, TypeDef[]> = existsSync(cachedPath)
+    ? JSON.parse(await readFileAsync(cachedPath, 'utf8'))
+    : {}
+
+  if (enableTsTypeCache()) {
+    for (const crate of Reflect.ownKeys(prevCrate2types) as string[]) {
+      if (!crate2types[crate]) {
+        // Now there are 2 possibilities
+        // 1. Incremental compilation, and the crate is skipped, so it's ts type info is not collected by proc macro
+        // 2. The napi derive is deleted by user.
+        // We distinguish this 2 by checking if the crate is in those changed crates
+
+        // if this crate is not recompiled crate, meaning it's ts type should be included
+        // if this crate is in recompiled crate but ts type is not collected, meaning napi derive is removed, simply skip
+        crate2types[crate] = prevCrate2types[crate]
+      }
+    }
+  }
+
+  // record as old tmp file for next gen
+  await writeFileAsync(cachedPath, JSON.stringify(crate2types), 'utf8')
 }
 
 function indentLines(input: string, spaces: number) {

@@ -1,0 +1,1 @@
+{"version":3,"file":"update-package.js","sourceRoot":"","sources":["../../../cli/src/update-package.ts"],"names":[],"mappings":";AAAA,OAAO,EAAE,cAAc,EAAE,MAAM,SAAS,CAAA;AAExC,MAAM,UAAgB,iBAAiB,CACrC,IAAY,EACZ,OAA4B;;QAE5B,MAAM,GAAG,GAAG,OAAO,CAAC,IAAI,CAAC,CAAA;QACzB,MAAM,cAAc,CAAC,IAAI,EAAE,IAAI,CAAC,SAAS,iCAAM,GAAG,GAAK,OAAO,GAAI,IAAI,EAAE,CAAC,CAAC,CAAC,CAAA;IAC7E,CAAC;CAAA"}

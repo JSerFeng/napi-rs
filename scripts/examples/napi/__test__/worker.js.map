@@ -1,0 +1,1 @@
+{"version":3,"file":"worker.js","sourceRoot":"","sources":["../../../../examples/napi/__test__/worker.js"],"names":[],"mappings":";AAAA,MAAM,EAAE,UAAU,EAAE,GAAG,OAAO,CAAC,gBAAgB,CAAC,CAAA;AAEhD,MAAM,MAAM,GAAG,OAAO,CAAC,UAAU,CAAC,CAAA;AAElC,UAAU,CAAC,WAAW,CACpB,MAAM,CAAC,MAAM,CAAC,QAAQ,yBAAiB,CAAC,MAAM,EAAE,GAAG,MAAM,CAAC,YAAY,CACvE,CAAA"}
